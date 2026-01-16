@@ -1,0 +1,28 @@
+{
+  "errors": {
+    "auth": {
+      "required": "Authentication required",
+      "invalid_credentials": "Invalid credentials provided",
+      "token_expired": "Authentication token has expired",
+      "insufficient_permissions": "Insufficient permissions to access this resource"
+    },
+    "validation": {
+      "invalid_input": "Invalid input data",
+      "missing_field": "Required field is missing",
+      "invalid_format": "Invalid format for field",
+      "out_of_range": "Value is out of valid range"
+    },
+    "resource": {
+      "not_found": "Resource not found",
+      "already_exists": "Resource already exists",
+      "conflict": "Resource conflict detected",
+      "locked": "Resource is currently locked"
+    },
+    "server": {
+      "internal_error": "Internal server error",
+      "unavailable": "Service temporarily unavailable",
+      "timeout": "Request timeout",
+      "overloaded": "Server is overloaded"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "errors": {
+    "auth": {
+      "required": "需要身份验证",
+      "invalid_credentials": "提供的凭据无效",
+      "token_expired": "身份验证令牌已过期",
+      "insufficient_permissions": "访问此资源的权限不足"
+    },
+    "validation": {
+      "invalid_input": "输入数据无效",
+      "missing_field": "缺少必填字段",
+      "invalid_format": "字段格式无效",
+      "out_of_range": "值超出有效范围"
+    },
+    "resource": {
+      "not_found": "未找到资源",
+      "already_exists": "资源已存在",
+      "conflict": "检测到资源冲突",
+      "locked": "资源当前已锁定"
+    },
+    "server": {
+      "internal_error": "内部服务器错误",
+      "unavailable": "服务暂时不可用",
+      "timeout": "请求超时",
+      "overloaded": "服务器过载"
+    }
+  }
+}

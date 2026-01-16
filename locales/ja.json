@@ -1,0 +1,28 @@
+{
+  "errors": {
+    "auth": {
+      "required": "認証が必要です",
+      "invalid_credentials": "無効な資格情報が提供されました",
+      "token_expired": "認証トークンの有効期限が切れています",
+      "insufficient_permissions": "このリソースにアクセスする権限が不足しています"
+    },
+    "validation": {
+      "invalid_input": "無効な入力データです",
+      "missing_field": "必須フィールドが不足しています",
+      "invalid_format": "フィールドの形式が無効です",
+      "out_of_range": "値が有効範囲外です"
+    },
+    "resource": {
+      "not_found": "リソースが見つかりません",
+      "already_exists": "リソースは既に存在します",
+      "conflict": "リソースの競合が検出されました",
+      "locked": "リソースは現在ロックされています"
+    },
+    "server": {
+      "internal_error": "内部サーバーエラー",
+      "unavailable": "サービスは一時的に利用できません",
+      "timeout": "リクエストタイムアウト",
+      "overloaded": "サーバーが過負荷状態です"
+    }
+  }
+}
