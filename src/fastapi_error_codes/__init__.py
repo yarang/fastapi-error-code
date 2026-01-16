@@ -17,6 +17,7 @@ Modules:
 - handlers: setup_exception_handler for FastAPI integration
 - registry: Exception registration system
 - decorators: @register_exception decorator
+- metrics: Error metrics collection and monitoring (Prometheus, Sentry, Dashboard)
 
 Basic Usage:
     from fastapi import FastAPI
@@ -51,6 +52,17 @@ from .handlers import setup_exception_handler
 from .i18n import MessageProvider
 from .models import ErrorResponse, ValidationErrorResponse, ErrorDetail, ErrorDetailItem
 from .registry import _registry, register_error_code, get_error_code_info, list_error_codes
+from .metrics import (
+    MetricsConfig,
+    MetricsPreset,
+    ErrorMetricsCollector,
+    PrometheusExporter,
+    SentryIntegration,
+    DashboardAPI,
+    setup_metrics,
+    get_config_from_env,
+    mask_pii,
+)
 
 __all__ = [
     "__version__",
@@ -75,6 +87,16 @@ __all__ = [
     "register_error_code",
     "get_error_code_info",
     "list_error_codes",
+    # Metrics and monitoring
+    "MetricsConfig",
+    "MetricsPreset",
+    "ErrorMetricsCollector",
+    "PrometheusExporter",
+    "SentryIntegration",
+    "DashboardAPI",
+    "setup_metrics",
+    "get_config_from_env",
+    "mask_pii",
 ]
 
 # Type checking imports
@@ -87,3 +109,8 @@ if TYPE_CHECKING:
     from .i18n import MessageProvider
     from .models import ErrorResponse, ValidationErrorResponse, ErrorDetail, ErrorDetailItem
     from .registry import ExceptionRegistry
+    from .metrics.config import MetricsConfig
+    from .metrics.collector import ErrorMetricsCollector
+    from .metrics.prometheus import PrometheusExporter
+    from .metrics.sentry import SentryIntegration
+    from .metrics.dashboard import DashboardAPI

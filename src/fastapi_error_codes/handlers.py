@@ -17,6 +17,14 @@ from fastapi_error_codes.config import ErrorHandlerConfig
 from fastapi_error_codes.i18n import MessageProvider
 from fastapi_error_codes.models import ErrorResponse
 
+# Metrics integration (optional)
+try:
+    from fastapi_error_codes.metrics.collector import ErrorMetricsCollector
+    from fastapi_error_codes.metrics.config import MetricsConfig
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +118,8 @@ async def _exception_handler(
     request: Request,
     exc: Exception,
     config: ErrorHandlerConfig,
-    provider: MessageProvider
+    provider: MessageProvider,
+    metrics_collector: Optional["ErrorMetricsCollector"] = None,
 ) -> JSONResponse:
     """
     Handle exceptions and convert to ErrorResponse.
@@ -169,6 +178,22 @@ async def _exception_handler(
     # Convert to dict for JSON response
     response_data = error_response.model_dump() if hasattr(error_response, 'model_dump') else error_response.dict()
 
+    # Record metrics (non-blocking, never affects response)
+    if metrics_collector and METRICS_AVAILABLE:
+        try:
+            metrics_collector.record(
+                error_code=error_code,
+                error_name=error_name,
+                status_code=status_code,
+                message=message,
+                detail=detail if config.debug_mode else None,
+                path=request.url.path,
+                method=request.method,
+            )
+        except Exception:
+            # Silently ignore metrics collection failures
+            pass
+
     # Create JSONResponse
     return JSONResponse(
         status_code=status_code,
@@ -179,7 +204,8 @@ async def _exception_handler(
 
 def setup_exception_handler(
     app: FastAPI,
-    config: Optional[ErrorHandlerConfig] = None
+    config: Optional[ErrorHandlerConfig] = None,
+    metrics_config: Optional["MetricsConfig"] = None,
 ) -> None:
     """
     Setup global exception handler for FastAPI application.
@@ -190,6 +216,7 @@ def setup_exception_handler(
     Args:
         app: FastAPI application instance
         config: Optional error handler configuration (uses default if None)
+        metrics_config: Optional metrics configuration for error tracking (SPEC-MONITOR-002)
 
     Example:
         ```python
@@ -213,6 +240,17 @@ def setup_exception_handler(
     if config is None:
         config = ErrorHandlerConfig()
 
+    # Initialize metrics collector if metrics_config provided
+    metrics_collector = None
+    if metrics_config and METRICS_AVAILABLE and metrics_config.enabled:
+        try:
+            metrics_collector = ErrorMetricsCollector(metrics_config)
+            # Store in app state for external access
+            app.state.metrics_collector = metrics_collector
+        except Exception:
+            # Gracefully degrade if metrics initialization fails
+            metrics_collector = None
+
     # Initialize message provider
     provider = MessageProvider(
         locale_dir=config.locale_dir,
@@ -222,7 +260,7 @@ def setup_exception_handler(
 
     async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         """Wrapper exception handler."""
-        return await _exception_handler(request, exc, config, provider)
+        return await _exception_handler(request, exc, config, provider, metrics_collector)
 
     # Register exception handler for all exceptions
     app.add_exception_handler(Exception, exception_handler)
