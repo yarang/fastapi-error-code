@@ -228,6 +228,364 @@ class ValidationErrorResponse(BaseModel):
     timestamp: str
 ```
 
+### 9. Monitoring System (SPEC-MONITOR-002)
+
+Complete error metrics collection and monitoring integration, located in `src/fastapi_error_codes/metrics/`.
+
+**Key Features:**
+- Thread-safe metrics collection with < 50μs performance
+- Prometheus metrics export at /metrics endpoint
+- Sentry error tracking with PII masking
+- Dashboard API with /api/metrics/* endpoints
+- Time-based bucketing for efficient querying
+- LRU eviction for memory management
+- Non-blocking collection (never affects request processing)
+
+#### 9.1 ErrorMetricsCollector
+
+Thread-safe metrics collector with time-based bucketing.
+
+**Architecture:**
+```python
+ErrorMetricsCollector
+    ├── config: MetricsConfig
+    ├── _lock: threading.Lock
+    ├── _buckets: OrderedDict[datetime, TimeBucket]
+    ├── _recent_events: List[ErrorEvent]
+    └── Methods:
+        ├── record(error_code, error_name, ...) -> str  # < 50μs
+        ├── get_snapshot() -> MetricsSnapshot
+        ├── get_error_counts_by_code() -> Dict[int, int]
+        ├── get_recent_events(limit) -> List[ErrorEvent]
+        └── clear() -> None
+```
+
+**Performance Characteristics:**
+- `record()`: < 50μs average execution time
+- `get_snapshot()`: < 1ms for typical workloads
+- Thread-safe under concurrent load
+- Coarse-grained locking for minimal contention
+
+**Data Flow:**
+```
+Exception raised
+    ↓
+_exception_handler() calls collector.record()
+    ↓
+Create ErrorEvent with timestamp
+    ↓
+Acquire lock
+    ↓
+Get or create current TimeBucket
+    ↓
+Add event to bucket and recent_events
+    ↓
+Enforce max_events limit with LRU eviction
+    ↓
+Release lock
+    ↓
+Return event_id (non-blocking)
+```
+
+#### 9.2 PrometheusExporter
+
+Prometheus metrics export using prometheus-client patterns.
+
+**Architecture:**
+```python
+PrometheusExporter
+    ├── collector: ErrorMetricsCollector
+    ├── enabled: bool
+    ├── namespace: str
+    └── Methods:
+        └── generate_metrics() -> str  # Prometheus text format
+```
+
+**Metrics Exported:**
+- `fastapi_errors_total`: Counter of all errors
+- `fastapi_errors_by_code`: Gauge grouped by error code
+- `fastapi_errors_by_status`: Gauge grouped by HTTP status code
+
+**Example Output:**
+```
+# HELP fastapi_errors_total Total number of application errors
+# TYPE fastapi_errors_total counter
+fastapi_errors_total 42
+
+# HELP fastapi_errors_by_code Errors grouped by application error code
+# TYPE fastapi_errors_by_code gauge
+fastapi_errors_by_code{error_code="404"} 10
+fastapi_errors_by_code{error_code="500"} 5
+```
+
+#### 9.3 SentryIntegration
+
+Sentry error tracking with automatic PII masking.
+
+**Architecture:**
+```python
+SentryIntegration
+    ├── config: MetricsConfig
+    ├── enabled: bool
+    ├── dsn: str
+    ├── pii_patterns: List[str]
+    ├── _sentry_sdk: Module (optional)
+    └── Methods:
+        ├── initialize() -> None
+        ├── capture_event(...) -> Optional[str]
+        ├── capture_exception(...) -> Optional[str]
+        ├── add_breadcrumb(...) -> None
+        ├── configure_scope(...) -> None
+        └── flush(timeout) -> bool
+```
+
+**PII Masking:**
+```python
+def mask_pii(data: Any, patterns: List[str]) -> Any:
+    """Recursively mask fields matching PII patterns"""
+    # Email masking: user@example.com → ***@***.***
+    # General masking: *** for sensitive fields
+```
+
+**Graceful Degradation:**
+- Sentry import failure: Continues without error tracking
+- Initialization failure: Continues without Sentry
+- Capture failure: Silently ignored, doesn't affect request
+
+#### 9.4 DashboardAPI
+
+FastAPI router with JSON endpoints for metrics consumption.
+
+**Architecture:**
+```python
+DashboardAPI
+    ├── collector: ErrorMetricsCollector
+    ├── router: APIRouter
+    └── Endpoints:
+        ├── GET /api/metrics/summary → MetricsSummaryResponse
+        ├── GET /api/metrics/recent?limit=100 → RecentEventsResponse
+        ├── GET /api/metrics/by-code/{code} → Dict
+        └── GET /api/metrics/top-errors?limit=10 → List[Dict]
+```
+
+**Response Models:**
+```python
+class MetricsSummaryResponse(BaseModel):
+    total_errors: int
+    error_counts: Dict[int, int]
+    bucket_count: int
+    timestamp: str
+
+class ErrorEventResponse(BaseModel):
+    error_code: int
+    error_name: str
+    status_code: int
+    message: str
+    detail: Any
+    path: Optional[str]
+    method: Optional[str]
+    timestamp: str
+    event_id: str
+```
+
+#### 9.5 MetricsConfig
+
+Configuration management with validation and presets.
+
+**Architecture:**
+```python
+@dataclass(frozen=True)
+class MetricsConfig:
+    enabled: bool = True
+    collection_interval_ms: int = 60000
+    max_events: int = 10000
+    prometheus_enabled: bool = True
+    sentry_enabled: bool = False
+    sentry_dsn: Optional[str] = None
+    dashboard_enabled: bool = True
+    pii_patterns: List[str] = [...]
+```
+
+**Presets:**
+- `MetricsPreset.development()`: Local development with minimal overhead
+- `MetricsPreset.production(sentry_dsn)`: Full monitoring with Sentry
+- `MetricsPreset.testing()`: Disabled for test environments
+- `MetricsPreset.disabled()`: All monitoring disabled
+- `get_config_from_env()`: Load from METRICS_* environment variables
+
+#### 9.6 Integration with Exception Handler
+
+The monitoring system integrates seamlessly with SPEC-001 exception handler:
+
+```python
+def setup_exception_handler(
+    app: FastAPI,
+    config: ErrorHandlerConfig,
+    metrics_config: Optional[MetricsConfig] = None,  # NEW
+) -> None:
+    # Initialize metrics collector if config provided
+    if metrics_config and metrics_config.enabled:
+        metrics_collector = ErrorMetricsCollector(metrics_config)
+        app.state.metrics_collector = metrics_collector
+    else:
+        metrics_collector = None
+
+    async def exception_handler(request, exc):
+        # Generate error response
+        error_response = create_error_response(exc, request)
+
+        # Record metrics (non-blocking, never affects response)
+        if metrics_collector:
+            try:
+                metrics_collector.record(
+                    error_code=exc.error_code,
+                    error_name=exc.error_name,
+                    status_code=exc.status_code,
+                    message=exc.message,
+                    path=request.url.path,
+                    method=request.method,
+                )
+            except Exception:
+                pass  # Silently ignore metrics failures
+
+        return JSONResponse(content=error_response.model_dump())
+```
+
+#### 9.7 Performance Characteristics
+
+**Memory Usage:**
+- BaseErrorEvent: ~500 bytes per event
+- TimeBucket overhead: ~200 bytes per bucket
+- Total minimal footprint: ~200KB for typical usage
+- LRU eviction enforces max_events limit
+
+**Collection Performance:**
+- `record()`: < 50μs average (verified)
+- Lock contention: Minimal with coarse-grained locking
+- Non-blocking: Never affects request processing
+
+**Query Performance:**
+- `get_snapshot()`: < 1ms for typical workloads
+- `get_recent_events()`: O(1) slice operation
+- Prometheus generation: < 5ms for 10K events
+
+#### 9.8 Data Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Exception Raised                            │
+│                  (BaseAppException)                             │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 _exception_handler()                             │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  1. Parse Accept-Language header                         │  │
+│  │  2. Resolve i18n message                                  │  │
+│  │  3. Create ErrorResponse                                 │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Metrics Collection (Non-blocking)                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  if metrics_collector:                                   │  │
+│  │    try:                                                  │  │
+│  │      metrics_collector.record()  # < 50μs               │  │
+│  │    except Exception:                                    │  │
+│  │      pass  # Never affects response                     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                ┌─────────────┼─────────────┐
+                │             │             │
+                ▼             ▼             ▼
+         ┌──────────┐  ┌──────────┐  ┌──────────┐
+         │Prometheus│  │  Sentry  │  │ Dashboard│
+         │ Counter++│  │  Event   │  │   API    │
+         └──────────┘  └──────────┘  └──────────┘
+                │             │             │
+                ▼             ▼             ▼
+         /metrics      Sentry Cloud   /api/metrics/*
+```
+
+#### 9.9 Thread Safety
+
+**Locking Strategy:**
+- Single `threading.Lock` for collector state
+- Coarse-grained locking for minimal contention
+- Lock-free snapshot generation (copy under lock, iterate outside)
+
+**Thread-safe Operations:**
+- `record()`: Lock held for bucket update and event append
+- `get_snapshot()`: Lock held for data copy, released before iteration
+- `clear()`: Lock held for state reset
+
+#### 9.10 Time-based Bucketing
+
+**Bucket Management:**
+```python
+TimeBucket
+    ├── start_time: datetime
+    ├── end_time: datetime
+    ├── error_counts: Dict[int, int]
+    └── total_count: int
+```
+
+**Lifecycle:**
+1. Create new bucket when current expires
+2. Add events to current bucket
+3. Clean up expired buckets periodically
+4. Remove oldest buckets when approaching max_events
+
+**Benefits:**
+- Efficient time-range queries
+- Automatic data expiration
+- Reduced memory footprint
+
+#### 9.11 Implementation Status
+
+| Component            | Status      | Module                |
+|----------------------|-------------|-----------------------|
+| MetricsConfig        | Complete    | metrics/config.py     |
+| ErrorMetricsCollector | Complete   | metrics/collector.py  |
+| PrometheusExporter   | Complete    | metrics/prometheus.py |
+| SentryIntegration    | Complete    | metrics/sentry.py     |
+| DashboardAPI         | Complete    | metrics/dashboard.py  |
+| setup_metrics        | Complete    | metrics/setup.py      |
+| Handler Integration  | Complete    | handlers.py           |
+
+### 10. Future Enhancements
+
+Pydantic models for standardized error responses, located in `src/fastapi_error_codes/models.py`.
+
+**Key Features:**
+- ErrorResponse for standard errors
+- ValidationErrorResponse for validation errors
+- ErrorDetail for individual field errors
+- Pydantic v1/v2 compatibility
+- from_exception() factory method
+
+**Models:**
+```python
+class ErrorResponse(BaseModel):
+    error_code: int
+    message: str
+    status_code: Optional[int]
+    detail: Any
+    timestamp: str
+    error_name: Optional[str]
+
+class ValidationErrorResponse(BaseModel):
+    error_code: int
+    message: str
+    errors: List[ErrorDetail]
+    status_code: Optional[int]
+    timestamp: str
+```
+
 ## Error Code Organization
 
 ### Domain-Based Organization

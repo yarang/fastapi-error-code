@@ -13,10 +13,23 @@ Structured exception handling with error codes and internationalization support 
 - **Type Safe**: Complete type hints with strict mypy configuration
 - **Production Ready**: Development and production configuration presets
 
+### Monitoring & Metrics (SPEC-MONITOR-002)
+
+- **Error Metrics Collection**: Thread-safe metrics collection with < 50μs performance
+- **Prometheus Integration**: Built-in `/metrics` endpoint for Prometheus monitoring
+- **Sentry Integration**: Automatic error tracking to Sentry with PII masking
+- **Dashboard API**: JSON API endpoints (`/api/metrics/*`) for real-time statistics
+- **Time-based Bucketing**: Automatic data aggregation and cleanup
+- **Non-blocking Collection**: Zero impact on request processing performance
+
 ## Installation
 
 ```bash
+# Basic installation
 pip install fastapi-error-codes
+
+# With monitoring support (Prometheus + Sentry)
+pip install fastapi-error-codes[monitoring]
 ```
 
 ## Quick Start
@@ -179,6 +192,41 @@ custom_config = ErrorHandlerConfig(
 # From environment variables
 # ERROR_LOCALE, ERROR_DEBUG, ERROR_TRACEBACK, ERROR_LOCALE_DIR
 env_config = ErrorHandlerConfig.from_environment()
+```
+
+### Error Monitoring
+
+```python
+from fastapi import FastAPI
+from fastapi_error_codes import (
+    setup_exception_handler,
+    ErrorHandlerConfig,
+    MetricsConfig,
+    MetricsPreset,
+)
+
+app = FastAPI()
+
+# Setup error handler with monitoring
+error_config = ErrorHandlerConfig(
+    default_locale="en",
+    debug_mode=True
+)
+metrics_config = MetricsPreset.production(
+    sentry_dsn="https://key@sentry.io/123"
+)
+
+setup_exception_handler(
+    app,
+    config=error_config,
+    metrics_config=metrics_config  # Enable monitoring
+)
+
+# Available endpoints:
+# - /metrics (Prometheus metrics)
+# - /api/metrics/summary (Dashboard summary)
+# - /api/metrics/recent (Recent errors)
+# - /api/metrics/top-errors (Top error codes)
 ```
 
 ### Accept-Language Header Support

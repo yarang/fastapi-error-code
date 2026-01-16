@@ -608,6 +608,382 @@ info = registry.get_registry_info()
 
 ---
 
+## Monitoring & Metrics (SPEC-MONITOR-002)
+
+### MetricsConfig
+
+Configuration for error metrics collection with validation and presets.
+
+```python
+@dataclass(frozen=True)
+class MetricsConfig:
+    enabled: bool = True
+    collection_interval_ms: int = 60000
+    max_events: int = 10000
+    prometheus_enabled: bool = True
+    sentry_enabled: bool = False
+    sentry_dsn: Optional[str] = None
+    dashboard_enabled: bool = True
+    pii_patterns: List[str] = field(default_factory=list)
+```
+
+**Attributes:**
+- `enabled` (bool): Enable/disable metrics collection (default: True)
+- `collection_interval_ms` (int): Collection interval in milliseconds, min: 1000 (default: 60000)
+- `max_events` (int): Maximum events in memory, min: 100, max: 1000000 (default: 10000)
+- `prometheus_enabled` (bool): Enable Prometheus metrics export (default: True)
+- `sentry_enabled` (bool): Enable Sentry error tracking (default: False)
+- `sentry_dsn` (str, optional): Sentry DSN for error tracking
+- `dashboard_enabled` (bool): Enable dashboard API endpoints (default: True)
+- `pii_patterns` (List[str]): PII field patterns to mask
+
+**Methods:**
+
+#### `to_dict() -> Dict[str, Any]`
+
+Convert configuration to dictionary.
+
+```python
+config = MetricsConfig(enabled=True)
+data = config.to_dict()
+```
+
+**Class Methods:**
+
+#### `MetricsPreset.development() -> MetricsConfig`
+
+Create configuration for development.
+
+```python
+config = MetricsPreset.development()
+# enabled=True, prometheus_enabled=True, sentry_enabled=False
+```
+
+#### `MetricsPreset.production(sentry_dsn: str) -> MetricsConfig`
+
+Create configuration for production.
+
+```python
+config = MetricsPreset.production(sentry_dsn="https://key@sentry.io/123")
+```
+
+#### `MetricsPreset.testing() -> MetricsConfig`
+
+Create configuration for testing.
+
+```python
+config = MetricsPreset.testing()
+# enabled=False, all integrations disabled
+```
+
+#### `get_config_from_env() -> MetricsConfig`
+
+Create configuration from environment variables.
+
+Environment variables:
+- `METRICS_ENABLED`: "true"/"false"
+- `METRICS_COLLECTION_INTERVAL_MS`: integer
+- `METRICS_MAX_EVENTS`: integer
+- `METRICS_PROMETHEUS_ENABLED`: "true"/"false"
+- `METRICS_SENTRY_ENABLED`: "true"/"false"
+- `METRICS_SENTRY_DSN`: Sentry DSN URL
+
+---
+
+### ErrorMetricsCollector
+
+Thread-safe error metrics collector with time-based bucketing.
+
+```python
+class ErrorMetricsCollector:
+    def __init__(self, config: MetricsConfig) -> None
+```
+
+**Attributes:**
+- `config` (MetricsConfig): Metrics configuration
+- `total_events` (int, read-only): Total events recorded
+
+**Methods:**
+
+#### `record(error_code, error_name, status_code, message, detail=None, path=None, method=None) -> str`
+
+Record an error event (thread-safe, < 50μs).
+
+```python
+event_id = collector.record(
+    error_code=404,
+    error_name="NotFound",
+    status_code=404,
+    message="Resource not found",
+    path="/api/users/123",
+    method="GET"
+)
+```
+
+#### `get_snapshot() -> MetricsSnapshot`
+
+Get current metrics snapshot.
+
+```python
+snapshot = collector.get_snapshot()
+print(f"Total: {snapshot.total_errors}")
+```
+
+#### `get_error_counts_by_code() -> Dict[int, int]`
+
+Get error counts grouped by error code.
+
+```python
+counts = collector.get_error_counts_by_code()
+# {404: 10, 500: 5}
+```
+
+#### `get_recent_events(limit=100) -> List[ErrorEvent]`
+
+Get most recent error events.
+
+```python
+recent = collector.get_recent_events(limit=50)
+```
+
+#### `clear() -> None`
+
+Clear all collected metrics.
+
+```python
+collector.clear()
+```
+
+---
+
+### PrometheusExporter
+
+Export error metrics in Prometheus format.
+
+```python
+class PrometheusExporter:
+    def __init__(self, collector: ErrorMetricsCollector, enabled: bool = True, namespace: str = "fastapi") -> None
+```
+
+**Methods:**
+
+#### `generate_metrics() -> str`
+
+Generate metrics in Prometheus text format.
+
+```python
+exporter = PrometheusExporter(collector)
+metrics = exporter.generate_metrics()
+# # HELP fastapi_errors_total Total number of application errors
+# # TYPE fastapi_errors_total counter
+# fastapi_errors_total 42
+```
+
+---
+
+### SentryIntegration
+
+Sentry error tracking with PII masking.
+
+```python
+class SentryIntegration:
+    def __init__(self, config: MetricsConfig) -> None
+```
+
+**Attributes:**
+- `enabled` (bool): Whether Sentry is enabled
+- `dsn` (str, optional): Sentry DSN
+
+**Methods:**
+
+#### `initialize() -> None`
+
+Initialize Sentry SDK.
+
+```python
+integration = SentryIntegration(config)
+integration.initialize()
+```
+
+#### `capture_event(error_code, error_name, message, detail=None, level="error") -> Optional[str]`
+
+Capture error event and send to Sentry.
+
+```python
+event_id = integration.capture_event(
+    error_code=404,
+    error_name="NotFound",
+    message="Resource not found",
+    detail={"email": "user@example.com"}  # Will be masked
+)
+```
+
+#### `capture_exception(exception, detail=None) -> Optional[str]`
+
+Capture Python exception.
+
+```python
+try:
+    risky_operation()
+except Exception as e:
+    integration.capture_exception(e)
+```
+
+#### `add_breadcrumb(category, message, level="info", data=None) -> None`
+
+Add breadcrumb for error context.
+
+```python
+integration.add_breadcrumb(
+    category="auth",
+    message="User login failed",
+    level="warning"
+)
+```
+
+#### `flush(timeout=2.0) -> bool`
+
+Flush pending events to Sentry.
+
+```python
+integration.flush(timeout=5.0)
+```
+
+---
+
+### DashboardAPI
+
+FastAPI router with JSON metrics endpoints.
+
+```python
+class DashboardAPI:
+    def __init__(self, collector: ErrorMetricsCollector) -> None
+```
+
+**Attributes:**
+- `router` (APIRouter): FastAPI router with metrics endpoints
+
+**Endpoints:**
+
+- `GET /api/metrics/summary`: Get metrics summary
+- `GET /api/metrics/recent?limit=100`: Get recent error events
+- `GET /api/metrics/by-code/{error_code}`: Get metrics for specific error code
+- `GET /api/metrics/top-errors?limit=10`: Get top error codes by count
+
+---
+
+### setup_metrics
+
+Setup error metrics collection for FastAPI.
+
+```python
+def setup_metrics(
+    app: FastAPI,
+    config: Optional[MetricsConfig] = None
+) -> Dict[str, Any]
+```
+
+**Parameters:**
+- `app` (FastAPI): FastAPI application instance
+- `config` (MetricsConfig, optional): Metrics configuration
+
+**Returns:**
+Dictionary with metrics components:
+- `collector`: ErrorMetricsCollector instance
+- `exporter`: PrometheusExporter instance
+- `sentry`: SentryIntegration instance
+- `dashboard`: DashboardAPI instance
+
+**Example:**
+
+```python
+from fastapi import FastAPI
+from fastapi_error_codes.metrics import setup_metrics, MetricsConfig
+
+app = FastAPI()
+config = MetricsConfig(
+    sentry_enabled=True,
+    sentry_dsn="https://key@sentry.io/123"
+)
+metrics = setup_metrics(app, config)
+
+# Access components
+collector = metrics["collector"]
+exporter = metrics["exporter"]
+```
+
+---
+
+### mask_pii
+
+Mask PII (Personally Identifiable Information) in data.
+
+```python
+def mask_pii(data: Any, patterns: List[str]) -> Any
+```
+
+**Parameters:**
+- `data`: Data to mask (dict, list, or primitive)
+- `patterns`: List of field patterns to mask
+
+**Returns:**
+Masked copy of the data
+
+**Example:**
+
+```python
+from fastapi_error_codes.metrics import mask_pii
+
+data = {"email": "user@example.com", "name": "John"}
+masked = mask_pii(data, ["email"])
+# {"email": "***@***.***", "name": "John"}
+```
+
+---
+
+### Monitoring Data Models
+
+#### ErrorEvent
+
+```python
+@dataclass
+class ErrorEvent:
+    error_code: int
+    error_name: str
+    status_code: int
+    message: str
+    detail: Any = None
+    path: Optional[str] = None
+    method: Optional[str] = None
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+```
+
+#### MetricsSnapshot
+
+```python
+@dataclass
+class MetricsSnapshot:
+    total_errors: int
+    error_counts: Dict[int, int]
+    recent_events: List[ErrorEvent]
+    bucket_count: int
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+```
+
+#### TimeBucket
+
+```python
+@dataclass
+class TimeBucket:
+    start_time: datetime
+    end_time: datetime
+    error_counts: Dict[int, int]
+    total_count: int = 0
+```
+
+---
+
 ## Package Exports
 
 ```python
