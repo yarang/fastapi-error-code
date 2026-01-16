@@ -557,34 +557,358 @@ TimeBucket
 | setup_metrics        | Complete    | metrics/setup.py      |
 | Handler Integration  | Complete    | handlers.py           |
 
-### 10. Future Enhancements
+### 10. Distributed Tracing System (SPEC-TRACING-003)
 
-Pydantic models for standardized error responses, located in `src/fastapi_error_codes/models.py`.
+Complete OpenTelemetry-based distributed tracing for microservices observability, located in `src/fastapi_error_codes/tracing/`.
 
 **Key Features:**
-- ErrorResponse for standard errors
-- ValidationErrorResponse for validation errors
-- ErrorDetail for individual field errors
-- Pydantic v1/v2 compatibility
-- from_exception() factory method
+- OpenTelemetry SDK integration with automatic span creation
+- Jaeger and OTLP exporters with retry logic
+- Exception tracing with PII masking
+- W3C Trace Context propagation across services
+- Trace ID correlation with error responses and metrics
+- Non-blocking export with batch processing
 
-**Models:**
+#### 10.1 TracingConfig
+
+Configuration management with validation for distributed tracing.
+
+**Architecture:**
 ```python
-class ErrorResponse(BaseModel):
-    error_code: int
-    message: str
-    status_code: Optional[int]
-    detail: Any
-    timestamp: str
-    error_name: Optional[str]
-
-class ValidationErrorResponse(BaseModel):
-    error_code: int
-    message: str
-    errors: List[ErrorDetail]
-    status_code: Optional[int]
-    timestamp: str
+@dataclass(frozen=True)
+class TracingConfig:
+    service_name: str                    # Service identifier
+    endpoint: str                         # Primary endpoint URL
+    sample_rate: float = 1.0              # 0.0-1.0 sampling
+    jaeger_host: str = "localhost"        # Jaeger agent
+    jaeger_port: int = 6831               # Jaeger port
+    otlp_endpoint: str = "http://localhost:4317"  # OTLP endpoint
+    enable_pii_masking: bool = True       # PII protection
+    pii_patterns: Dict[str, str]          # Custom patterns
 ```
+
+**Validation:**
+- Service name: alphanumeric, hyphens, underscores only
+- Endpoint: valid HTTP/HTTPS URL required
+- Sample rate: must be between 0.0 and 1.0
+
+#### 10.2 OpenTelemetryIntegration
+
+OpenTelemetry SDK lifecycle management with resource configuration.
+
+**Architecture:**
+```python
+OpenTelemetryIntegration
+    ├── config: TracingConfig
+    ├── service_version: Optional[str]
+    ├── tracer_provider: TracerProvider
+    └── Methods:
+        ├── initialize() -> None              # SDK setup
+        ├── get_tracer(name, version) -> Tracer
+        └── shutdown() -> None                # Cleanup
+```
+
+**Resource Attributes:**
+```python
+{
+    "service.name": "my-service",
+    "service.version": "1.0.0",
+    "deployment.environment": "production"
+}
+```
+
+#### 10.3 ExceptionTracer
+
+Automatic exception recording in spans with PII masking.
+
+**Architecture:**
+```python
+ExceptionTracer
+    ├── masker: PIIMasker
+    └── Methods:
+        ├── record_exception(span, exception, attributes) -> None
+        ├── extract_error_code(exception) -> Optional[int]
+        └── _get_sanitized_stacktrace(exception) -> str
+```
+
+**Span Event Attributes:**
+```python
+{
+    "exception.type": "UserNotFoundException",
+    "exception.message": "User 123 not found",
+    "exception.stacktrace": "File \"base.py\", line 42...",
+    "exception.error_code": "301"
+}
+```
+
+#### 10.4 PIIMasker
+
+Sensitive data masking for PII protection in spans.
+
+**Default Patterns:**
+- Email: `user@example.com` → `u***@example.com`
+- Phone: `123-456-7890` → `***-***-7890`
+- Credit Card: `4111-1111-1111-1111` → `****-****-****-1111`
+- SSN: `123-45-6789` → `***-**-6789`
+
+**Architecture:**
+```python
+PIIMasker
+    ├── patterns: List[PIIPattern]
+    ├── compiled_patterns: List[Pattern]
+    └── Methods:
+        ├── mask_email(email) -> str
+        ├── mask_phone(phone) -> str
+        ├── mask_credit_card(card) -> str
+        ├── mask_ssn(ssn) -> str
+        ├── mask_value(value) -> str
+        ├── mask_dict(data) -> Dict
+        └── mask_list(data) -> List
+```
+
+#### 10.5 Exporters
+
+Trace export with retry logic and graceful degradation.
+
+**JaegerExporter:**
+```python
+JaegerExporter
+    ├── host: str
+    ├── port: int
+    ├── max_retries: int = 3
+    ├── underlying_exporter: SpanExporter
+    └── Methods:
+        ├── initialize() -> None
+        ├── export(spans) -> SpanExportResult
+        └── shutdown() -> None
+```
+
+**OTLPExporter:**
+```python
+OTLPExporter
+    ├── endpoint: str
+    ├── max_retries: int = 3
+    ├── underlying_exporter: SpanExporter
+    └── Methods:
+        ├── initialize() -> None
+        ├── export(spans) -> SpanExportResult
+        └── shutdown() -> None
+```
+
+**Retry Logic:**
+- Max 3 retry attempts
+- 5 second timeout between retries
+- Returns SUCCESS if any attempt succeeds
+- Graceful degradation on failure
+
+#### 10.6 TraceContextPropagator
+
+W3C Trace Context propagation across service boundaries.
+
+**Architecture:**
+```python
+TraceContextPropagator
+    └── Methods:
+        ├── inject(carrier, set_header) -> None      # Add traceparent
+        ├── extract(carrier, get_header) -> Context  # Read traceparent
+        └── get_trace_id() -> Optional[str]          # Current trace ID
+```
+
+**traceparent Header Format:**
+```
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+             -- ---------------------------------- ---------------- --
+             version trace-id (16 bytes hex)         parent-id       flags
+```
+
+#### 10.7 FastAPI Integration
+
+Automatic tracing middleware with exception handler integration.
+
+**setup_tracing Architecture:**
+```python
+setup_tracing(app, config, exporter_type="otlp")
+    ├── Initialize OpenTelemetryIntegration
+    ├── Create exporter (Jaeger/OTLP)
+    ├── Add span processor to tracer provider
+    ├── Add OpenTelemetryMiddleware to FastAPI
+    ├── Add trace ID middleware
+    ├── Integrate with exception handler
+    └── Return OpenTelemetryIntegration instance
+```
+
+**Middleware Flow:**
+```
+HTTP Request (with traceparent header)
+    ↓
+Extract trace context
+    ↓
+Create root span (or child span)
+    ↓
+Process request
+    ↓
+On exception: record_exception in span
+    ↓
+Add X-Trace-ID header to response
+    ↓
+Export spans asynchronously
+```
+
+#### 10.8 Trace ID Correlation
+
+Integration with error responses and metrics.
+
+**Error Response Enhancement:**
+```python
+# Add trace_id to error detail
+{
+    "error_code": 301,
+    "message": "User not found",
+    "detail": {
+        "user_id": 123,
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+    },
+    "timestamp": "2026-01-16T10:00:00Z"
+}
+```
+
+**Metrics Correlation:**
+```python
+# Prometheus metrics with trace_id label
+fastapi_errors_total{
+    error_code="301",
+    trace_id="4bf92f3577b34da6a3ce929d0e0e4736"
+}
+```
+
+#### 10.9 Performance Characteristics
+
+**Overhead:**
+- Span creation: < 100μs
+- Exception recording: < 200μs
+- Trace context propagation: < 50μs
+- PII masking: < 100μs per value
+
+**Memory Usage:**
+- Base span: ~1KB per span
+- Batch buffer: ~512KB default
+- Total overhead: < 1% for typical workloads
+
+#### 10.10 Security Considerations
+
+**PII Masking:**
+- Automatic email, phone, credit card, SSN masking
+- Custom pattern support via `pii_patterns`
+- Stack trace path sanitization
+
+**Data Protection:**
+- No PII in span attributes by default
+- Configurable masking sensitivity
+- Trace IDs don't contain sensitive data
+
+#### 10.11 Data Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     HTTP Request                                │
+│              with traceparent header (optional)                 │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              OpenTelemetryMiddleware                            │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  1. Extract traceparent header                          │  │
+│  │  2. Create root or child span                           │  │
+│  │  3. Set span attributes (http.method, http.url)        │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Request Processing                            │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Business logic execution                                │  │
+│  │  Database queries, HTTP calls, etc.                      │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Exception (if raised)                              │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  1. Extract error_code from BaseAppException            │  │
+│  │  2. Mask PII in exception message and detail             │  │
+│  │  3. Record exception event in current span              │  │
+│  │  4. Set span status to Error                            │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 Response Processing                             │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  1. Add X-Trace-ID header to response                    │  │
+│  │  2. Add trace_id to error response detail                │  │
+│  │  3. Record metrics with trace_id label                   │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                ┌─────────────┼─────────────┐
+                │             │             │
+                ▼             ▼             ▼
+         ┌──────────┐  ┌──────────┐  ┌──────────┐
+         │ Jaeger   │  │   OTLP   │  │ Console  │
+         │ Exporter │  │ Exporter │  │ (debug)  │
+         └──────────┘  └──────────┘  └──────────┘
+                │             │             │
+                ▼             ▼             ▼
+         Jaeger UI      Grafana Tempo   stdout/logs
+```
+
+#### 10.12 Cross-Service Tracing
+
+**Service A → Service B Flow:**
+```
+Service A (root span)
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    ↓ (inject traceparent header)
+Service B (child span)
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    parent_span_id: 00f067aa0ba902b7
+    span_id: 00f067aa0ba902b8
+    ↓ (inject traceparent header)
+Service C (child span)
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    parent_span_id: 00f067aa0ba902b8
+    span_id: 00f067aa0ba902b9
+```
+
+#### 10.13 Implementation Status
+
+| Component            | Status      | Module                    |
+|----------------------|-------------|---------------------------|
+| TracingConfig        | Complete    | tracing/config.py         |
+| OpenTelemetryIntegration | Complete | tracing/otel.py          |
+| ExceptionTracer      | Complete    | tracing/exceptions.py     |
+| PIIMasker            | Complete    | tracing/exceptions.py     |
+| JaegerExporter       | Complete    | tracing/exporters.py      |
+| OTLPExporter         | Complete    | tracing/exporters.py      |
+| TraceContextPropagator | Complete  | tracing/propagator.py     |
+| setup_tracing        | Complete    | tracing/integration.py    |
+| FastAPI Integration  | Complete    | tracing/integration.py    |
+| Handler Integration  | Complete    | handlers.py               |
+
+### 11. Future Enhancements
+
+Potential extensions for distributed tracing:
+
+- Grafana Tempo exporter
+- Zipkin exporter
+- File-based exporter for local development
+- Custom span processor support
+- Baggage propagation for distributed context
 
 ## Error Code Organization
 

@@ -984,6 +984,622 @@ class TimeBucket:
 
 ---
 
+## Distributed Tracing (SPEC-TRACING-003)
+
+### TracingConfig
+
+Configuration for distributed tracing with validation.
+
+```python
+@dataclass(frozen=True)
+class TracingConfig:
+    service_name: str
+    endpoint: str
+    sample_rate: float = 1.0
+    jaeger_host: str = "localhost"
+    jaeger_port: int = 6831
+    otlp_endpoint: str = "http://localhost:4317"
+    enable_pii_masking: bool = True
+    pii_patterns: Dict[str, str] = field(default_factory=dict)
+```
+
+**Attributes:**
+- `service_name` (str): Service identifier (alphanumeric, hyphens, underscores)
+- `endpoint` (str): Primary endpoint URL for trace export
+- `sample_rate` (float): Sampling rate from 0.0 to 1.0 (default: 1.0)
+- `jaeger_host` (str): Jaeger agent host (default: "localhost")
+- `jaeger_port` (int): Jaeger agent port (default: 6831)
+- `otlp_endpoint` (str): OTLP endpoint URL (default: "http://localhost:4317")
+- `enable_pii_masking` (bool): Enable PII masking (default: True)
+- `pii_patterns` (Dict[str, str]): Custom PII patterns
+
+**Validation:**
+- Service name cannot be empty
+- Service name must contain only alphanumeric, hyphens, underscores
+- Endpoint must be valid HTTP or HTTPS URL
+- Sample rate must be between 0.0 and 1.0
+
+**Example:**
+
+```python
+from fastapi_error_codes.tracing import TracingConfig
+
+config = TracingConfig(
+    service_name="my-service",
+    endpoint="http://localhost:4317",
+    sample_rate=0.1  # Sample 10% of traces
+)
+```
+
+---
+
+### OpenTelemetryIntegration
+
+OpenTelemetry SDK lifecycle management.
+
+```python
+class OpenTelemetryIntegration:
+    def __init__(
+        self,
+        config: TracingConfig,
+        service_version: Optional[str] = None
+    ) -> None
+```
+
+**Attributes:**
+- `config` (TracingConfig): Tracing configuration
+- `service_version` (str, optional): Service version for resource attributes
+- `tracer_provider` (TracerProvider, read-only): OpenTelemetry tracer provider
+
+**Methods:**
+
+#### `initialize() -> None`
+
+Initialize OpenTelemetry SDK with resources and sampling.
+
+```python
+integration = OpenTelemetryIntegration(config)
+integration.initialize()
+```
+
+#### `get_tracer(name: str, version: Optional[str] = None) -> Tracer`
+
+Get a tracer instance from the provider.
+
+```python
+tracer = integration.get_tracer("my-app", version="1.0.0")
+```
+
+#### `shutdown() -> None`
+
+Shutdown the tracer provider and cleanup resources.
+
+```python
+integration.shutdown()
+```
+
+---
+
+### ExceptionTracer
+
+Exception recording in spans with PII masking.
+
+```python
+class ExceptionTracer:
+    def __init__(self, masker: Optional[PIIMasker] = None) -> None
+```
+
+**Attributes:**
+- `masker` (PIIMasker): PII masker for sanitizing exception data
+
+**Methods:**
+
+#### `record_exception(span: Span, exception: Exception, attributes: Optional[Dict[str, Any]] = None) -> None`
+
+Record exception in span as event.
+
+```python
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+with tracer.start_as_current_span("operation"):
+    current_span = trace.get_current_span()
+    try:
+        risky_operation()
+    except Exception as e:
+        exception_tracer.record_exception(current_span, e)
+```
+
+#### `extract_error_code(exception: Exception) -> Optional[int]`
+
+Extract error code from BaseAppException.
+
+```python
+error_code = exception_tracer.extract_error_code(exc)
+# Returns: 301 for BaseAppException with error_code=301
+```
+
+---
+
+### PIIMasker
+
+Sensitive data masking for PII protection.
+
+```python
+class PIIMasker:
+    def __init__(self, custom_patterns: Optional[List[PIIPattern]] = None) -> None
+```
+
+**Default PII Patterns:**
+- Email: `user@example.com` → `u***@example.com`
+- Phone: `123-456-7890` → `***-***-7890`
+- Credit Card: `4111-1111-1111-1111` → `****-****-****-1111`
+- SSN: `123-45-6789` → `***-**-6789`
+
+**Methods:**
+
+#### `mask_email(email: str) -> str`
+
+Mask email address showing first char and domain.
+
+```python
+masker = PIIMasker()
+masked = masker.mask_email("user@example.com")
+# Returns: "u***@example.com"
+```
+
+#### `mask_phone(phone: str) -> str`
+
+Mask phone number showing last 4 digits.
+
+```python
+masked = masker.mask_phone("123-456-7890")
+# Returns: "***-***-7890"
+```
+
+#### `mask_credit_card(card: str) -> str`
+
+Mask credit card showing last 4 digits.
+
+```python
+masked = masker.mask_credit_card("4111-1111-1111-1111")
+# Returns: "****-****-****-1111"
+```
+
+#### `mask_ssn(ssn: str) -> str`
+
+Mask SSN showing last 4 digits.
+
+```python
+masked = masker.mask_ssn("123-45-6789")
+# Returns: "***-**-6789"
+```
+
+#### `mask_value(value: str) -> str`
+
+Mask PII in string value using all patterns.
+
+```python
+masked = masker.mask_value("Contact user@example.com or 123-456-7890")
+# Returns: "Contact u***@example.com or ***-***-7890"
+```
+
+#### `mask_dict(data: Dict[str, Any]) -> Dict[str, Any]`
+
+Recursively mask PII in dictionary values.
+
+```python
+data = {
+    "email": "user@example.com",
+    "phone": "123-456-7890",
+    "name": "John Doe"
+}
+masked = masker.mask_dict(data)
+# Returns: {"email": "u***@example.com", "phone": "***-***-7890", "name": "John Doe"}
+```
+
+#### `mask_list(data: List[Any]) -> List[Any]`
+
+Recursively mask PII in list values.
+
+```python
+data = ["user@example.com", "123-456-7890", "safe text"]
+masked = masker.mask_list(data)
+# Returns: ["u***@example.com", "***-***-7890", "safe text"]
+```
+
+---
+
+### PIIPattern
+
+Configuration for a PII detection pattern.
+
+```python
+@dataclass
+class PIIPattern:
+    name: str
+    pattern: str
+    replacement: str
+```
+
+**Attributes:**
+- `name` (str): Pattern name for identification
+- `pattern` (str): Regex pattern to match PII
+- `replacement` (str): Replacement string for matched PII
+
+**Example:**
+
+```python
+from fastapi_error_codes.tracing import PIIPattern, PIIMasker
+
+custom_pattern = PIIPattern(
+    name="api_key",
+    pattern=r"api[_-]?key['\"]?\s*[:=]\s*['\"]?[a-zA-Z0-9]{20,}['\"]?",
+    replacement="***API-KEY***"
+)
+
+masker = PIIMasker(custom_patterns=[custom_pattern])
+```
+
+---
+
+### JaegerExporter
+
+Jaeger exporter with retry logic.
+
+```python
+class JaegerExporter:
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 6831,
+        config: Optional[ExporterConfig] = None
+    ) -> None
+```
+
+**Attributes:**
+- `host` (str): Jaeger agent host
+- `port` (int): Jaeger agent port
+- `max_retries` (int): Maximum number of retry attempts
+- `underlying_exporter` (SpanExporter, read-only): OpenTelemetry JaegerExporter
+
+**Methods:**
+
+#### `initialize() -> None`
+
+Create and initialize the underlying Jaeger exporter.
+
+```python
+exporter = JaegerExporter(host="localhost", port=6831)
+exporter.initialize()
+```
+
+#### `export(spans: List[ReadableSpan]) -> SpanExportResult`
+
+Export spans to Jaeger with retry logic.
+
+```python
+result = exporter.export(spans)
+# Returns: SpanExportResult.SUCCESS or SpanExportResult.FAILURE
+```
+
+#### `shutdown() -> None`
+
+Shutdown the exporter and cleanup resources.
+
+```python
+exporter.shutdown()
+```
+
+---
+
+### OTLPExporter
+
+OTLP exporter with retry logic.
+
+```python
+class OTLPExporter:
+    def __init__(
+        self,
+        endpoint: str = "http://localhost:4317",
+        config: Optional[ExporterConfig] = None
+    ) -> None
+```
+
+**Attributes:**
+- `endpoint` (str): OTLP endpoint URL
+- `max_retries` (int): Maximum number of retry attempts
+- `underlying_exporter` (SpanExporter, read-only): OpenTelemetry OTLPSpanExporter
+
+**Methods:**
+
+#### `initialize() -> None`
+
+Create and initialize the underlying OTLP exporter.
+
+```python
+exporter = OTLPExporter(endpoint="http://localhost:4317")
+exporter.initialize()
+```
+
+#### `export(spans: List[ReadableSpan]) -> SpanExportResult`
+
+Export spans via OTLP with retry logic.
+
+```python
+result = exporter.export(spans)
+# Returns: SpanExportResult.SUCCESS or SpanExportResult.FAILURE
+```
+
+#### `shutdown() -> None`
+
+Shutdown the exporter and cleanup resources.
+
+```python
+exporter.shutdown()
+```
+
+---
+
+### ExporterConfig
+
+Configuration for trace exporters.
+
+```python
+@dataclass
+class ExporterConfig:
+    max_retries: int = 3
+    retry_timeout: float = 5.0
+    export_timeout: float = 30.0
+```
+
+**Attributes:**
+- `max_retries` (int): Maximum number of retry attempts (default: 3)
+- `retry_timeout` (float): Timeout between retries in seconds (default: 5.0)
+- `export_timeout` (float): Timeout for export operation in seconds (default: 30.0)
+
+---
+
+### TraceContextPropagator
+
+W3C Trace Context propagation across services.
+
+```python
+class TraceContextPropagator:
+    def inject(carrier: Dict[str, str], set_header: Callable) -> None
+    def extract(carrier: Dict[str, str], get_header: Callable) -> Context
+    def get_trace_id() -> Optional[str]
+```
+
+**Methods:**
+
+#### `inject(carrier: Dict[str, str], set_header: Callable) -> None`
+
+Inject trace context into carrier.
+
+```python
+from fastapi_error_codes.tracing import TraceContextPropagator
+
+carrier = {}
+propagator = TraceContextPropagator()
+propagator.inject(carrier, lambda k, v: carrier.update({k: v}))
+# carrier now contains: {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+```
+
+#### `extract(carrier: Dict[str, str], get_header: Callable) -> Context`
+
+Extract trace context from carrier.
+
+```python
+carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+context = propagator.extract(carrier, lambda k: carrier.get(k))
+```
+
+#### `get_trace_id() -> Optional[str]`
+
+Get current trace ID from active span.
+
+```python
+trace_id = TraceContextPropagator.get_trace_id()
+# Returns: "4bf92f3577b34da6a3ce929d0e0e4736"
+```
+
+---
+
+### setup_tracing
+
+Setup distributed tracing for FastAPI.
+
+```python
+def setup_tracing(
+    app: FastAPI,
+    config: TracingConfig,
+    exporter_type: str = "otlp",
+    enable_exception_tracing: bool = True,
+    enable_pii_masking: bool = True
+) -> OpenTelemetryIntegration
+```
+
+**Parameters:**
+- `app` (FastAPI): FastAPI application instance
+- `config` (TracingConfig): Tracing configuration
+- `exporter_type` (str, default="otlp"): Type of exporter ("jaeger" or "otlp")
+- `enable_exception_tracing` (bool): Enable automatic exception tracing
+- `enable_pii_masking` (bool): Enable PII masking in spans
+
+**Returns:**
+- `OpenTelemetryIntegration` instance
+
+**Example:**
+
+```python
+from fastapi import FastAPI
+from fastapi_error_codes.tracing import TracingConfig, setup_tracing
+
+app = FastAPI()
+config = TracingConfig(
+    service_name="my-service",
+    endpoint="http://localhost:4317"
+)
+integration = setup_tracing(app, config)
+```
+
+---
+
+### get_trace_id
+
+Get current trace ID from active span.
+
+```python
+def get_trace_id() -> Optional[str]
+```
+
+**Returns:**
+- Trace ID as hex string if available, None otherwise
+
+**Example:**
+
+```python
+from fastapi_error_codes.tracing import get_trace_id
+
+trace_id = get_trace_id()
+if trace_id:
+    print(f"Current trace ID: {trace_id}")
+```
+
+---
+
+### add_trace_id_to_error_response
+
+Add trace ID to error response for traceability.
+
+```python
+def add_trace_id_to_error_response(error_response: ErrorResponse) -> ErrorResponse
+```
+
+**Parameters:**
+- `error_response` (ErrorResponse): Error response to enhance
+
+**Returns:**
+- `ErrorResponse` with trace_id added
+
+**Example:**
+
+```python
+from fastapi_error_codes.tracing import add_trace_id_to_error_response
+from fastapi_error_codes.models import ErrorResponse
+
+response = ErrorResponse(
+    error_code=301,
+    message="User not found",
+    detail={"user_id": 123}
+)
+enhanced = add_trace_id_to_error_response(response)
+# enhanced.detail now contains: {"user_id": 123, "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"}
+```
+
+---
+
+### correlate_trace_with_metrics
+
+Correlate error with metrics using trace ID.
+
+```python
+def correlate_trace_with_metrics(
+    error_code: int,
+    metrics_collector: Optional[ErrorMetricsCollector] = None
+) -> None
+```
+
+**Parameters:**
+- `error_code` (int): Error code from exception
+- `metrics_collector` (ErrorMetricsCollector, optional): Metrics collector
+
+**Example:**
+
+```python
+from fastapi_error_codes.tracing import correlate_trace_with_metrics
+
+# Trace ID is automatically extracted and added to metrics
+correlate_trace_with_metrics(
+    error_code=301,
+    metrics_collector=app.state.metrics_collector
+)
+```
+
+---
+
+### sanitize_stacktrace
+
+Sanitize stack trace by removing sensitive file paths.
+
+```python
+def sanitize_stacktrace(stacktrace: str) -> str
+```
+
+**Parameters:**
+- `stacktrace` (str): Raw stack trace string
+
+**Returns:**
+- Sanitized stack trace with paths removed
+
+**Example:**
+
+```python
+from fastapi_error_codes.tracing import sanitize_stacktrace
+
+raw_stacktrace = '''
+Traceback (most recent call last):
+  File "/home/user/project/src/module.py", line 42, in function
+    raise ValueError("Error")
+'''
+
+sanitized = sanitize_stacktrace(raw_stacktrace)
+# Returns: "File \"module.py\", line 42, in function"
+```
+
+---
+
+### create_exporter
+
+Factory function to create exporters.
+
+```python
+def create_exporter(
+    exporter_type: str,
+    config: TracingConfig
+) -> SpanExporter
+```
+
+**Parameters:**
+- `exporter_type` (str): Type of exporter ("jaeger" or "otlp")
+- `config` (TracingConfig): Tracing configuration
+
+**Returns:**
+- Initialized exporter instance
+
+**Raises:**
+- `ValueError`: If exporter_type is unknown
+
+**Example:**
+
+```python
+from fastapi_error_codes.tracing import create_exporter, TracingConfig
+
+config = TracingConfig(
+    service_name="my-service",
+    endpoint="http://localhost:4317"
+)
+
+# Create Jaeger exporter
+jaeger_exporter = create_exporter("jaeger", config)
+
+# Create OTLP exporter
+otlp_exporter = create_exporter("otlp", config)
+```
+
+---
+
 ## Package Exports
 
 ```python
@@ -1015,6 +1631,36 @@ from fastapi_error_codes import (
     register_error_code,
     get_error_code_info,
     list_error_codes,
+)
+
+# Distributed tracing exports (from fastapi_error_codes.tracing)
+from fastapi_error_codes.tracing import (
+    # Configuration
+    TracingConfig,
+
+    # Core integration
+    OpenTelemetryIntegration,
+    setup_tracing,
+
+    # Exporters
+    JaegerExporter,
+    OTLPExporter,
+    ExporterConfig,
+    create_exporter,
+
+    # Exception tracing
+    ExceptionTracer,
+    PIIMasker,
+    PIIPattern,
+    sanitize_stacktrace,
+
+    # Context propagation
+    TraceContextPropagator,
+
+    # Utilities
+    get_trace_id,
+    add_trace_id_to_error_response,
+    correlate_trace_with_metrics,
 )
 ```
 
