@@ -22,6 +22,16 @@ Structured exception handling with error codes and internationalization support 
 - **Time-based Bucketing**: Automatic data aggregation and cleanup
 - **Non-blocking Collection**: Zero impact on request processing performance
 
+### Distributed Tracing (SPEC-TRACING-003)
+
+- **OpenTelemetry Integration**: Standard-based distributed tracing with OpenTelemetry SDK
+- **Multiple Exporters**: Jaeger and OTLP (OpenTelemetry Protocol) support
+- **Exception Tracing**: Automatic exception event recording in spans
+- **PII Masking**: Sensitive data masking (email, phone, credit card, SSN) in traces
+- **Trace Context Propagation**: W3C Trace Context support for cross-service tracing
+- **Trace ID Correlation**: Automatic trace ID in error responses and metrics
+- **Performance**: < 100μs overhead per request, < 1% total impact
+
 ## Installation
 
 ```bash
@@ -30,6 +40,12 @@ pip install fastapi-error-codes
 
 # With monitoring support (Prometheus + Sentry)
 pip install fastapi-error-codes[monitoring]
+
+# With distributed tracing support (OpenTelemetry + Jaeger + OTLP)
+pip install fastapi-error-codes[tracing]
+
+# With all optional features
+pip install fastapi-error-codes[monitoring,tracing]
 ```
 
 ## Quick Start
@@ -229,6 +245,43 @@ setup_exception_handler(
 # - /api/metrics/top-errors (Top error codes)
 ```
 
+### Distributed Tracing
+
+```python
+from fastapi import FastAPI
+from fastapi_error_codes import (
+    setup_exception_handler,
+    ErrorHandlerConfig,
+)
+from fastapi_error_codes.tracing import TracingConfig, setup_tracing
+
+app = FastAPI()
+
+# Setup error handler
+error_config = ErrorHandlerConfig(default_locale="en")
+setup_exception_handler(app, config=error_config)
+
+# Setup distributed tracing
+tracing_config = TracingConfig(
+    service_name="my-service",
+    endpoint="http://localhost:4317",  # OTLP endpoint
+    sample_rate=0.1,  # Sample 10% of traces
+)
+
+setup_tracing(
+    app,
+    config=tracing_config,
+    exporter_type="otlp",  # or "jaeger"
+)
+
+# Automatic features:
+# - All HTTP requests are traced with spans
+# - Exceptions are recorded as span events
+# - Trace IDs added to error responses
+# - PII automatically masked in spans
+# - X-Trace-ID header added to responses
+```
+
 ### Accept-Language Header Support
 
 The error handler automatically parses the `Accept-Language` header:
@@ -248,7 +301,9 @@ The error handler automatically parses the `Accept-Language` header:
 - [Architecture](docs/ARCHITECTURE.md) - System architecture and design
 - [API Reference](docs/API.md) - Complete API documentation
 - [Examples](examples/) - Usage examples
-- [SPEC-001](.moai/specs/SPEC-001/spec.md) - Implementation specification
+- [SPEC-001](.moai/specs/SPEC-001/spec.md) - Error handler implementation specification
+- [SPEC-MONITOR-002](.moai/specs/SPEC-MONITOR-002/spec.md) - Monitoring system specification
+- [SPEC-TRACING-003](.moai/specs/SPEC-TRACING-003/spec.md) - Distributed tracing specification
 
 ## Testing
 
