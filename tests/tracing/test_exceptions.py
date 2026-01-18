@@ -8,18 +8,15 @@ Tests ExceptionTracer and PIIMasker:
 - Error code extraction from BaseAppException
 """
 
-import pytest
 import re
 from unittest.mock import Mock, patch
-
-from opentelemetry import trace
 
 from fastapi_error_codes.base import BaseAppException
 from fastapi_error_codes.tracing.exceptions import (
     ExceptionTracer,
     PIIMasker,
     PIIPattern,
-    sanitize_stacktrace
+    sanitize_stacktrace,
 )
 
 
@@ -166,8 +163,8 @@ class TestExceptionTracer:
 
     def test_record_exception_in_span(self):
         """WHEN exception occurs, THEN should record as span event"""
-        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
         from fastapi_error_codes.tracing.config import TracingConfig
+        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 
         # Initialize OpenTelemetry to get recording span
         config = TracingConfig(service_name="test-service", endpoint="http://localhost:4317")
@@ -211,8 +208,8 @@ class TestExceptionTracer:
 
     def test_record_exception_with_pii_in_message(self):
         """WHEN exception message contains PII, THEN should mask in event"""
-        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
         from fastapi_error_codes.tracing.config import TracingConfig
+        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 
         # Initialize OpenTelemetry to get recording span
         config = TracingConfig(service_name="test-service", endpoint="http://localhost:4317")
@@ -234,8 +231,8 @@ class TestExceptionTracer:
 
     def test_record_exception_with_attributes(self):
         """WHEN exception recorded, THEN should add exception attributes"""
-        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
         from fastapi_error_codes.tracing.config import TracingConfig
+        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 
         # Initialize OpenTelemetry to get recording span
         config = TracingConfig(service_name="test-service", endpoint="http://localhost:4317")
@@ -259,7 +256,7 @@ class TestExceptionTracer:
         """WHEN no masker provided, THEN should record without PII masking"""
         exception_tracer = ExceptionTracer(masker=None)
 
-        with patch("fastapi_error_codes.tracing.exceptions.trace") as mock_trace:
+        with patch("opentelemetry.trace") as mock_trace:
             mock_span = Mock()
             exception_tracer.record_exception(mock_span, ValueError("Test error"))
             # Should still record exception

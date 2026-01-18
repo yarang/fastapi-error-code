@@ -7,10 +7,11 @@ error handling with FastAPI applications.
 
 import logging
 import traceback
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 
 from fastapi_error_codes.base import BaseAppException
 from fastapi_error_codes.config import ErrorHandlerConfig
@@ -194,11 +195,32 @@ async def _exception_handler(
             # Silently ignore metrics collection failures
             pass
 
+    # Get trace ID from OpenTelemetry context if available
+    trace_id: Optional[str] = None
+    try:
+        current_span = trace.get_current_span()
+        if current_span:
+            span_context = current_span.get_span_context()
+            if span_context.is_valid:
+                trace_id = format(span_context.trace_id, "032x")
+    except Exception:
+        # Silently ignore trace ID retrieval failures
+        pass
+
+    # Prepare response headers
+    response_headers: Dict[str, Any] = {}
+    if headers:
+        response_headers.update(headers)
+
+    # Add X-Trace-ID header if available
+    if trace_id:
+        response_headers["X-Trace-ID"] = trace_id
+
     # Create JSONResponse
     return JSONResponse(
         status_code=status_code,
         content=response_data,
-        headers=headers
+        headers=response_headers
     )
 
 

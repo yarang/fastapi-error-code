@@ -11,17 +11,16 @@ Provides setup_tracing() function for automatic tracing:
 from typing import Any, Optional
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from opentelemetry import trace
-from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from fastapi_error_codes.metrics import ErrorMetricsCollector
+from fastapi_error_codes.models import ErrorResponse
 from fastapi_error_codes.tracing.config import TracingConfig
-from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 from fastapi_error_codes.tracing.exceptions import ExceptionTracer, PIIMasker
 from fastapi_error_codes.tracing.exporters import create_exporter
-from fastapi_error_codes.handlers import setup_exception_handler
-from fastapi_error_codes.models import ErrorResponse
-from fastapi_error_codes.metrics import ErrorMetricsCollector
+from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 
 
 def setup_tracing(
@@ -68,10 +67,10 @@ def setup_tracing(
     integration.initialize()
 
     # Create and configure exporter
+    # Wrap in BatchSpanProcessor for efficient export
     exporter = create_exporter(exporter_type, config)
-    integration.tracer_provider.add_span_processor(
-        exporter.underlying_exporter  # type: ignore
-    )
+    batch_processor = BatchSpanProcessor(exporter.underlying_exporter)
+    integration.tracer_provider.add_span_processor(batch_processor)
 
     # Setup exception tracing if enabled
     exception_tracer = None
@@ -100,15 +99,21 @@ def instrument_app(
         app: FastAPI application instance
         config: Tracing configuration
         exception_tracer: Optional exception tracer
-    """
-    # Add custom middleware for trace ID extraction
-    @app.middleware("http")
-    async def add_trace_id_to_request(request: Request, call_next):
-        """Extract trace ID from context and add to request state."""
-        import asyncio
-        from starlette.datastructures import Headers
 
-        # Process request
+    Note: Uses FastAPIInstrumentor for proper FastAPI integration.
+    Custom middleware adds X-Trace-ID header after span creation.
+    """
+    # Instrument FastAPI app with OpenTelemetry
+    # This creates spans automatically for all HTTP requests
+    FastAPIInstrumentor.instrument_app(app)
+
+    # Add custom middleware to add X-Trace-ID header
+    # FastAPI middleware runs in LIFO order (last added runs first)
+    @app.middleware("http")
+    async def add_trace_id_to_response(request: Request, call_next):
+        """Extract trace ID from context and add to response headers."""
+
+        # Process request (span is created by FastAPIInstrumentor)
         response = await call_next(request)
 
         # Add trace ID to response headers if available
@@ -120,10 +125,6 @@ def instrument_app(
                 response.headers["X-Trace-ID"] = trace_id
 
         return response
-
-    # Add OpenTelemetry ASGI middleware
-    excluded_urls = ["/health", "/ready", "/metrics"]
-    OpenTelemetryMiddleware(app, excluded_urls=excluded_urls)
 
 
 def _setup_exception_handler_integration(

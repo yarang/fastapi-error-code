@@ -12,19 +12,18 @@ Note: Full trace context propagation requires actual HTTP traffic.
 These tests use TestClient which has limitations for W3C trace context testing.
 """
 
-import pytest
-from typing import Dict, Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-from fastapi_error_codes.tracing.config import TracingConfig
-from fastapi_error_codes.tracing.integration import setup_tracing, get_trace_id
-from fastapi_error_codes.tracing.exceptions import ExceptionTracer, PIIMasker
-from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
-from fastapi_error_codes.base import BaseAppException
-from fastapi_error_codes.models import ErrorResponse
 from opentelemetry import trace
+
+from fastapi_error_codes.base import BaseAppException
+from fastapi_error_codes.config import ErrorHandlerConfig
+from fastapi_error_codes.handlers import setup_exception_handler
+from fastapi_error_codes.tracing.config import TracingConfig
+from fastapi_error_codes.tracing.exceptions import ExceptionTracer, PIIMasker
+from fastapi_error_codes.tracing.integration import get_trace_id, setup_tracing
+from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 
 
 class TestE2ERequestTracing:
@@ -49,7 +48,7 @@ class TestE2ERequestTracing:
             trace_id = get_trace_id()
             return {"has_trace_id": trace_id is not None}
 
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request
         response = client.get("/test")
@@ -81,7 +80,7 @@ class TestE2ERequestTracing:
         def test_endpoint():
             return {"message": "test"}
 
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make multiple requests and collect trace IDs
         trace_ids = set()
@@ -112,17 +111,22 @@ class TestE2EExceptionRecording:
             endpoint="http://localhost:4317"
         )
 
+        # Define route first
+        @app.get("/error")
+        def error_endpoint():
+            raise ValueError("Test error")
+
+        # Setup exception handler after routes
+        setup_exception_handler(app)
+
+        # Setup tracing
         integration = setup_tracing(
             app,
             config,
             enable_exception_tracing=True
         )
 
-        @app.get("/error")
-        def error_endpoint():
-            raise ValueError("Test error")
-
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request that triggers exception
         response = client.get("/error")
@@ -146,12 +150,7 @@ class TestE2EExceptionRecording:
             endpoint="http://localhost:4317"
         )
 
-        integration = setup_tracing(
-            app,
-            config,
-            enable_exception_tracing=True
-        )
-
+        # Define route first
         @app.get("/not-found")
         def not_found_endpoint():
             raise BaseAppException(
@@ -160,7 +159,17 @@ class TestE2EExceptionRecording:
                 status_code=404
             )
 
-        client = TestClient(app)
+        # Setup exception handler after routes
+        setup_exception_handler(app)
+
+        # Setup tracing
+        integration = setup_tracing(
+            app,
+            config,
+            enable_exception_tracing=True
+        )
+
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request that triggers exception
         response = client.get("/not-found")
@@ -193,13 +202,7 @@ class TestE2EPIIMasking:
             enable_pii_masking=True
         )
 
-        integration = setup_tracing(
-            app,
-            config,
-            enable_exception_tracing=True,
-            enable_pii_masking=True
-        )
-
+        # Define route first
         @app.get("/error")
         def error_endpoint():
             # Exception with PII
@@ -208,7 +211,18 @@ class TestE2EPIIMasking:
                 "with phone 555-123-4567"
             )
 
-        client = TestClient(app)
+        # Setup exception handler after routes
+        setup_exception_handler(app)
+
+        # Setup tracing
+        integration = setup_tracing(
+            app,
+            config,
+            enable_exception_tracing=True,
+            enable_pii_masking=True
+        )
+
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request - should not crash
         response = client.get("/error")
@@ -231,6 +245,15 @@ class TestE2EPIIMasking:
             enable_pii_masking=False
         )
 
+        # Define route first
+        @app.get("/error")
+        def error_endpoint():
+            raise ValueError("User john@example.com failed login")
+
+        # Setup exception handler after routes
+        setup_exception_handler(app)
+
+        # Setup tracing
         integration = setup_tracing(
             app,
             config,
@@ -238,11 +261,7 @@ class TestE2EPIIMasking:
             enable_pii_masking=False
         )
 
-        @app.get("/error")
-        def error_endpoint():
-            raise ValueError("User john@example.com failed login")
-
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request - should not crash
         response = client.get("/error")
@@ -268,8 +287,7 @@ class TestE2ETraceIDInErrorResponse:
             endpoint="http://localhost:4317"
         )
 
-        integration = setup_tracing(app, config)
-
+        # Define route first
         @app.get("/error")
         def error_endpoint():
             raise BaseAppException(
@@ -278,7 +296,13 @@ class TestE2ETraceIDInErrorResponse:
                 status_code=404
             )
 
-        client = TestClient(app)
+        # Setup exception handler after routes
+        setup_exception_handler(app)
+
+        # Setup tracing
+        integration = setup_tracing(app, config)
+
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request that triggers exception
         response = client.get("/error")
@@ -318,7 +342,7 @@ class TestE2EExporterIntegration:
         def test_endpoint():
             return {"message": "test"}
 
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request - should succeed even if Jaeger is not available
         response = client.get("/test")
@@ -346,7 +370,7 @@ class TestE2EExporterIntegration:
         def test_endpoint():
             return {"message": "test"}
 
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request - should succeed even if OTLP endpoint is not available
         response = client.get("/test")
@@ -379,7 +403,7 @@ class TestE2ESamplingConfiguration:
         def test_endpoint():
             return {"message": "test"}
 
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make multiple requests
         for _ in range(5):
@@ -409,7 +433,7 @@ class TestE2ESamplingConfiguration:
         def test_endpoint():
             return {"message": "test"}
 
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
 
         # Make request
         response = client.get("/test")
@@ -491,6 +515,7 @@ class TestE2EMetricsCorrelation:
         THEN should include trace ID in metrics
         """
         from unittest.mock import Mock
+
         from fastapi_error_codes.tracing.integration import correlate_trace_with_metrics
 
         config = TracingConfig(

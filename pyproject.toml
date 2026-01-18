@@ -41,6 +41,7 @@ classifiers = [
 
 dependencies = [
     "fastapi>=0.68.0",
+    "opentelemetry-instrumentation-fastapi>=0.54b1",
     "pydantic>=1.8.0,<3.0.0",
     "typing-extensions>=4.0.0",
 ]
