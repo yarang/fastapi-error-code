@@ -5,9 +5,6 @@ Tests Prometheus metrics export with prometheus-client integration.
 """
 
 import re
-from typing import List
-
-import pytest
 
 from fastapi_error_codes.metrics.collector import ErrorMetricsCollector
 from fastapi_error_codes.metrics.config import MetricsConfig

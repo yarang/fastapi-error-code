@@ -2,13 +2,11 @@
 Tests for DashboardAPI module.
 """
 
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest
-
-from fastapi_error_codes.metrics.config import MetricsConfig
 from fastapi_error_codes.metrics.collector import ErrorMetricsCollector
+from fastapi_error_codes.metrics.config import MetricsConfig
 from fastapi_error_codes.metrics.dashboard import DashboardAPI
 
 

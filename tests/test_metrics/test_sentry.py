@@ -4,10 +4,7 @@ Tests for SentryIntegration module.
 Tests Sentry error tracking with PII masking and graceful degradation.
 """
 
-from unittest.mock import MagicMock, patch
-from typing import Any, Dict
-
-import pytest
+from unittest.mock import MagicMock
 
 from fastapi_error_codes.metrics.config import MetricsConfig
 from fastapi_error_codes.metrics.sentry import (

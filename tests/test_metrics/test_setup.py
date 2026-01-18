@@ -2,10 +2,8 @@
 Tests for setup_metrics module.
 """
 
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
-
-import pytest
+from fastapi.testclient import TestClient
 
 from fastapi_error_codes.metrics.config import MetricsConfig
 from fastapi_error_codes.metrics.setup import setup_metrics

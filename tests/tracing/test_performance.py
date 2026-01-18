@@ -7,15 +7,16 @@ Tests performance requirements:
 - trace ID extraction < 10μs
 """
 
-import pytest
 import time
 from typing import List
 
-from fastapi_error_codes.tracing.config import TracingConfig
-from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
-from fastapi_error_codes.tracing.exceptions import ExceptionTracer, PIIMasker
-from fastapi_error_codes.tracing.propagator import TraceContextPropagator
+import pytest
 from opentelemetry import trace
+
+from fastapi_error_codes.tracing.config import TracingConfig
+from fastapi_error_codes.tracing.exceptions import ExceptionTracer, PIIMasker
+from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
+from fastapi_error_codes.tracing.propagator import TraceContextPropagator
 
 
 class TestExceptionTracerPerformance:
@@ -258,8 +259,9 @@ class TestErrorHandlingOverhead:
         WHEN handling an exception
         THEN total overhead should be less than 1ms (P95)
         """
-        from fastapi import FastAPI, Request
+        from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from fastapi_error_codes.base import BaseAppException
         from fastapi_error_codes.tracing.integration import setup_tracing
 

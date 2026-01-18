@@ -185,17 +185,15 @@ def add_trace_id_to_error_response(error_response: ErrorResponse) -> ErrorRespon
         ErrorResponse with trace_id added
     """
     trace_id = get_trace_id()
-    if trace_id:
-        # Add trace_id to detail or create new field
-        if hasattr(error_response, "detail"):
-            if isinstance(error_response.detail, dict):
-                error_response.detail["trace_id"] = trace_id
-            else:
-                # Create enhanced detail
-                error_response.detail = {
-                    "message": str(error_response.detail),
-                    "trace_id": trace_id
-                }
+    if trace_id and hasattr(error_response, "detail"):
+        if isinstance(error_response.detail, dict):
+            error_response.detail["trace_id"] = trace_id
+        else:
+            # Create enhanced detail
+            error_response.detail = {
+                "message": str(error_response.detail),
+                "trace_id": trace_id
+            }
     return error_response
 
 

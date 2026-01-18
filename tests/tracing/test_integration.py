@@ -8,18 +8,17 @@ Tests FastAPI integration:
 - Trace ID in error responses
 """
 
-import pytest
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from fastapi_error_codes.models import ErrorResponse
 from fastapi_error_codes.tracing.config import TracingConfig
 from fastapi_error_codes.tracing.integration import (
-    setup_tracing,
-    get_trace_id,
     add_trace_id_to_error_response,
-    correlate_trace_with_metrics
+    correlate_trace_with_metrics,
+    get_trace_id,
+    setup_tracing,
 )
-from fastapi_error_codes.models import ErrorResponse
 
 
 class TestSetupTracing:
@@ -197,8 +196,9 @@ class TestTraceCorrelationWithMetrics:
 
     def test_correlate_trace_with_metrics_with_trace(self):
         """WHEN active trace exists, THEN should record with trace_id"""
-        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
         from unittest.mock import Mock
+
+        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 
         config = TracingConfig(
             service_name="test-service",

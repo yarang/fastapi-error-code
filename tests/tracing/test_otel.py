@@ -9,12 +9,9 @@ Tests OpenTelemetryIntegration class:
 - Shutdown cleanup
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.resources import Resource
 
 from fastapi_error_codes.tracing.config import TracingConfig
 from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration

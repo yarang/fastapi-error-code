@@ -98,7 +98,7 @@ class TestMetricsConfig:
 
         # Store original env vars
         original_env: Dict[str, Any] = {
-            key: os.environ.get(key) for key in env_vars.keys()
+            key: os.environ.get(key) for key in env_vars
         }
 
         try:

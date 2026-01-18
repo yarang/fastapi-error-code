@@ -5,8 +5,6 @@ This module provides PrometheusExporter for exporting error metrics
 in Prometheus format using prometheus-client library.
 """
 
-import re
-from typing import Optional
 
 from fastapi_error_codes.metrics.collector import ErrorMetricsCollector
 

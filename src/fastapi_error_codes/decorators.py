@@ -12,7 +12,6 @@ from typing import Any, Callable, Dict, Optional, Type
 from fastapi_error_codes.base import BaseAppException
 from fastapi_error_codes.registry import _registry
 
-
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 

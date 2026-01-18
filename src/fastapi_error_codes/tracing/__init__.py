@@ -23,28 +23,26 @@ Basic Usage:
 """
 
 from fastapi_error_codes.tracing.config import TracingConfig
-from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
-from fastapi_error_codes.tracing.exporters import (
-    JaegerExporter,
-    OTLPExporter,
-    ExporterConfig,
-    create_exporter
-)
 from fastapi_error_codes.tracing.exceptions import (
     ExceptionTracer,
     PIIMasker,
     PIIPattern,
-    sanitize_stacktrace
+    sanitize_stacktrace,
 )
-from fastapi_error_codes.tracing.propagator import (
-    TraceContextPropagator
+from fastapi_error_codes.tracing.exporters import (
+    ExporterConfig,
+    JaegerExporter,
+    OTLPExporter,
+    create_exporter,
 )
 from fastapi_error_codes.tracing.integration import (
-    setup_tracing,
-    get_trace_id,
     add_trace_id_to_error_response,
-    correlate_trace_with_metrics
+    correlate_trace_with_metrics,
+    get_trace_id,
+    setup_tracing,
 )
+from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
+from fastapi_error_codes.tracing.propagator import TraceContextPropagator
 
 __all__ = [
     # Configuration

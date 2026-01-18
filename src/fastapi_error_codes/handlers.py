@@ -5,6 +5,7 @@ This module provides the setup_exception_handler function for integrating
 error handling with FastAPI applications.
 """
 
+import contextlib
 import logging
 import traceback
 from typing import Any, Dict, List, Optional
@@ -181,7 +182,7 @@ async def _exception_handler(
 
     # Record metrics (non-blocking, never affects response)
     if metrics_collector and METRICS_AVAILABLE:
-        try:
+        with contextlib.suppress(Exception):
             metrics_collector.record(
                 error_code=error_code,
                 error_name=error_name,
@@ -191,9 +192,6 @@ async def _exception_handler(
                 path=request.url.path,
                 method=request.method,
             )
-        except Exception:
-            # Silently ignore metrics collection failures
-            pass
 
     # Get trace ID from OpenTelemetry context if available
     trace_id: Optional[str] = None

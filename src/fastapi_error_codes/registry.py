@@ -7,11 +7,9 @@ and prevent duplicate error codes.
 
 import logging
 import threading
-from types import TracebackType
 from typing import Any, Dict, List, Optional, Type
 
 from fastapi_error_codes.base import BaseAppException
-
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)

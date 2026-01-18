@@ -11,7 +11,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +102,7 @@ class MessageProvider:
         if not locale_file.exists():
             raise FileNotFoundError(f"Locale file not found: {locale_file}")
 
-        with open(locale_file, "r", encoding="utf-8") as f:
+        with open(locale_file, encoding="utf-8") as f:
             messages = json.load(f)
 
         # Cache the loaded messages

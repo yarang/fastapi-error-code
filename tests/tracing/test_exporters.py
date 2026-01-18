@@ -9,17 +9,17 @@ Tests JaegerExporter and OTLPExporter:
 - Exporter integration with OpenTelemetryIntegration
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
+import pytest
 from opentelemetry.sdk.trace.export import SpanExportResult
 
 from fastapi_error_codes.tracing.config import TracingConfig
 from fastapi_error_codes.tracing.exporters import (
+    ExporterConfig,
     JaegerExporter,
     OTLPExporter,
-    ExporterConfig,
-    create_exporter
+    create_exporter,
 )
 
 

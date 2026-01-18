@@ -9,18 +9,19 @@ Provides OpenTelemetryIntegration class for:
 - Shutdown cleanup
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace.sampling import TraceIdRatioBased, Sampler as SDKSampler
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import Sampler as SDKSampler
+from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
 from fastapi_error_codes.tracing.config import TracingConfig
 
 if TYPE_CHECKING:
-    from opentelemetry.sdk.trace.sampling import Sampler as SDKSamplerType
+    pass
 
 
 class OpenTelemetryIntegration:

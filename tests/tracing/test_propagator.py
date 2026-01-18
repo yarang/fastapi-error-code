@@ -8,14 +8,9 @@ Tests TraceContextPropagator:
 - Cross-service tracing support
 """
 
-import pytest
 from opentelemetry.trace import SpanContext
 
-from fastapi_error_codes.tracing.propagator import (
-    TraceContextPropagator,
-    DictGetter,
-    DictSetter
-)
+from fastapi_error_codes.tracing.propagator import TraceContextPropagator
 
 
 class TestTraceContextPropagator:
@@ -79,8 +74,8 @@ class TestTraceContextPropagator:
 
     def test_inject_to_headers(self):
         """WHEN context injected, THEN should add traceparent to headers"""
-        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
         from fastapi_error_codes.tracing.config import TracingConfig
+        from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 
         config = TracingConfig(service_name="test", endpoint="http://localhost:4317")
         integration = OpenTelemetryIntegration(config)

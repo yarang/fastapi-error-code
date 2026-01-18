@@ -8,15 +8,13 @@ Tests verify:
 - Semantic attribute conventions
 """
 
-import pytest
-from typing import Dict, Any
+
+from opentelemetry.trace import SpanKind
 
 from fastapi_error_codes.tracing.config import TracingConfig
+from fastapi_error_codes.tracing.exceptions import ExceptionTracer
 from fastapi_error_codes.tracing.otel import OpenTelemetryIntegration
 from fastapi_error_codes.tracing.propagator import TraceContextPropagator
-from fastapi_error_codes.tracing.exceptions import ExceptionTracer
-from opentelemetry import trace
-from opentelemetry.trace import SpanKind
 
 
 class TestOpenTelemetryStandardCompliance:

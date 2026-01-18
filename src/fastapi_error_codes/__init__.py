@@ -50,19 +50,19 @@ from .decorators import register_exception
 from .domain import ErrorDomain
 from .handlers import setup_exception_handler
 from .i18n import MessageProvider
-from .models import ErrorResponse, ValidationErrorResponse, ErrorDetail, ErrorDetailItem
-from .registry import _registry, register_error_code, get_error_code_info, list_error_codes
 from .metrics import (
+    DashboardAPI,
+    ErrorMetricsCollector,
     MetricsConfig,
     MetricsPreset,
-    ErrorMetricsCollector,
     PrometheusExporter,
     SentryIntegration,
-    DashboardAPI,
-    setup_metrics,
     get_config_from_env,
     mask_pii,
+    setup_metrics,
 )
+from .models import ErrorDetail, ErrorDetailItem, ErrorResponse, ValidationErrorResponse
+from .registry import _registry, get_error_code_info, list_error_codes, register_error_code
 
 __all__ = [
     "__version__",
@@ -107,10 +107,10 @@ if TYPE_CHECKING:
     from .domain import ErrorDomain
     from .handlers import setup_exception_handler
     from .i18n import MessageProvider
-    from .models import ErrorResponse, ValidationErrorResponse, ErrorDetail, ErrorDetailItem
-    from .registry import ExceptionRegistry
-    from .metrics.config import MetricsConfig
     from .metrics.collector import ErrorMetricsCollector
+    from .metrics.config import MetricsConfig
+    from .metrics.dashboard import DashboardAPI
     from .metrics.prometheus import PrometheusExporter
     from .metrics.sentry import SentryIntegration
-    from .metrics.dashboard import DashboardAPI
+    from .models import ErrorDetail, ErrorDetailItem, ErrorResponse, ValidationErrorResponse
+    from .registry import ExceptionRegistry

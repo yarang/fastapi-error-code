@@ -5,10 +5,8 @@ RED phase: Write failing tests first to define expected behavior.
 """
 
 import json
-import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Any
 
 import pytest
 
