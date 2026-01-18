@@ -8,9 +8,10 @@ Provides setup_tracing() function for automatic tracing:
 - Trace ID in error responses
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
 
@@ -132,17 +133,29 @@ def _setup_exception_handler_integration(
     """
     Integrate tracing with exception handler.
 
+    This function stores the exception tracer in app state for use by
+    the existing exception handler. The exception handler can access it
+    via app.state.exception_tracer to record exceptions in spans.
+
     Args:
         app: FastAPI application instance
         exception_tracer: Optional exception tracer
     """
-    # This is a placeholder for integration with setup_exception_handler
-    # In production, this would modify the exception handler to:
-    # 1. Extract trace ID from current span
-    # 2. Add trace ID to error responses
-    # 3. Record exceptions in spans
-    # 4. Correlate with metrics
-    pass
+    # Store exception_tracer in app state for use in exception handler
+    # The existing setup_exception_handler can access it via app.state.exception_tracer
+    if exception_tracer:
+        app.state.exception_tracer = exception_tracer
+
+    # Note: We don't register a new exception handler here because:
+    # 1. The user should call setup_exception_handler() first
+    # 2. The setup_exception_handler can access app.state.exception_tracer
+    # 3. Registering a new handler here could cause recursion
+    #
+    # If the user wants exception recording in spans, they should:
+    # 1. Call setup_exception_handler(app, config)
+    # 2. Call setup_tracing(app, tracing_config, enable_exception_tracing=True)
+    #
+    # The exception handler can then use app.state.exception_tracer if available
 
 
 def get_trace_id() -> Optional[str]:
@@ -187,19 +200,44 @@ def add_trace_id_to_error_response(error_response: ErrorResponse) -> ErrorRespon
 
 def correlate_trace_with_metrics(
     error_code: int,
-    metrics_collector: Optional[ErrorMetricsCollector] = None
+    error_name: str,
+    status_code: int,
+    message: str,
+    metrics_collector: Optional[ErrorMetricsCollector] = None,
+    path: Optional[str] = None,
+    method: Optional[str] = None,
+    detail: Any = None,
 ) -> None:
     """
     Correlate error with metrics using trace ID.
 
     Args:
         error_code: Error code from exception
+        error_name: Exception class name
+        status_code: HTTP status code
+        message: Error message
         metrics_collector: Optional metrics collector
+        path: Request path (optional)
+        method: HTTP method (optional)
+        detail: Additional error details (optional)
     """
     trace_id = get_trace_id()
     if trace_id and metrics_collector:
-        # Record metric with trace_id as label
-        metrics_collector.record_error(
+        # Add trace_id to detail for correlation
+        enhanced_detail = detail or {}
+        if isinstance(enhanced_detail, dict):
+            enhanced_detail = dict(enhanced_detail)  # Make a copy
+            enhanced_detail["trace_id"] = trace_id
+        else:
+            enhanced_detail = {"trace_id": trace_id, "value": enhanced_detail}
+
+        # Record metric with trace_id in detail
+        metrics_collector.record(
             error_code=error_code,
-            labels={"trace_id": trace_id}
+            error_name=error_name,
+            status_code=status_code,
+            message=message,
+            detail=enhanced_detail,
+            path=path,
+            method=method,
         )
