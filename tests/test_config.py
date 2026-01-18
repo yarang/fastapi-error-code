@@ -4,7 +4,6 @@ Tests for config.py module - ErrorHandlerConfig class.
 RED phase: Write failing tests first to define expected behavior.
 """
 
-from pathlib import Path
 
 import pytest
 

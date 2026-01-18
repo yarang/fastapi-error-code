@@ -1,11 +1,9 @@
 project:
-  name: fastapi-error-codes
-  description: 'Structured exception handling with error codes and i18n support for FastAPI applications'
-  type: library
-  locale: 'ko_KR.UTF-8'
-  created_at: '2026-01-16T09:44:05.768369Z'
+  name: fastapi-error-code
+  description: ''
+  type: ''
+  locale: '{{LOCALE}}'
+  created_at: '2026-01-18T02:59:07.101690Z'
   initialized: 'true'
-  version: '0.1.0'
 github:
-  profile_name: yarang
-  repository: fastapi-error-codes
+  profile_name: Wondo Jung

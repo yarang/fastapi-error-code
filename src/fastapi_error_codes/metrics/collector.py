@@ -192,7 +192,7 @@ class ErrorMetricsCollector:
         self.config = config
         self._lock = threading.Lock()
         self._total_events = 0
-        self._buckets: "OrderedDict[datetime, TimeBucket]" = OrderedDict()
+        self._buckets: OrderedDict[datetime, TimeBucket] = OrderedDict()
         self._recent_events: List[ErrorEvent] = []
         self._current_bucket: Optional[TimeBucket] = None
         self._bucket_duration = timedelta(milliseconds=config.collection_interval_ms)

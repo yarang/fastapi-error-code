@@ -5,13 +5,13 @@ This module provides FastAPI router with /api/metrics/* endpoints
 for metrics consumption and querying.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from fastapi_error_codes.metrics.collector import ErrorMetricsCollector, MetricsSnapshot
+from fastapi_error_codes.metrics.collector import ErrorMetricsCollector
 
 
 class MetricsSummaryResponse(BaseModel):

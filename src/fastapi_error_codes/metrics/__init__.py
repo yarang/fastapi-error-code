@@ -10,20 +10,20 @@ This module provides:
 - setup_metrics: FastAPI integration function
 """
 
+from fastapi_error_codes.metrics.collector import (
+    ErrorEvent,
+    ErrorMetricsCollector,
+    MetricsSnapshot,
+    TimeBucket,
+)
 from fastapi_error_codes.metrics.config import (
     MetricsConfig,
     MetricsPreset,
     get_config_from_env,
 )
-from fastapi_error_codes.metrics.collector import (
-    ErrorMetricsCollector,
-    ErrorEvent,
-    MetricsSnapshot,
-    TimeBucket,
-)
+from fastapi_error_codes.metrics.dashboard import DashboardAPI
 from fastapi_error_codes.metrics.prometheus import PrometheusExporter
 from fastapi_error_codes.metrics.sentry import SentryIntegration, mask_pii
-from fastapi_error_codes.metrics.dashboard import DashboardAPI
 from fastapi_error_codes.metrics.setup import setup_metrics
 
 __all__ = [

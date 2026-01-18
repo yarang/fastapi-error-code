@@ -64,7 +64,7 @@ class TracingConfig:
             if scheme not in ('http', 'https'):
                 raise ValueError("Endpoint must use http or https scheme")
         except IndexError:
-            raise ValueError("Endpoint must be a valid URL with http or https scheme")
+            raise ValueError("Endpoint must be a valid URL with http or https scheme") from None
 
     def _validate_sample_rate(self) -> None:
         """Validate sampling rate is between 0.0 and 1.0."""

@@ -5,10 +5,8 @@ This module provides SentryIntegration for sending error events
 to Sentry with PII masking and graceful degradation.
 """
 
-import copy
-import re
 import threading
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from fastapi_error_codes.metrics.config import MetricsConfig
 

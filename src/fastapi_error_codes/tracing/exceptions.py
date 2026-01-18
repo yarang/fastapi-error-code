@@ -13,9 +13,8 @@ import traceback
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Pattern
 
-from opentelemetry import trace
-from opentelemetry.trace import Span
 from opentelemetry.sdk.trace import Status, StatusCode
+from opentelemetry.trace import Span
 
 from fastapi_error_codes.base import BaseAppException
 
@@ -103,10 +102,7 @@ class PIIMasker:
             return email
 
         username, domain = email.split("@", 1)
-        if len(username) > 0:
-            masked_username = username[0] + "***"
-        else:
-            masked_username = "***"
+        masked_username = username[0] + "***" if len(username) > 0 else "***"
 
         return f"{masked_username}@{domain}"
 

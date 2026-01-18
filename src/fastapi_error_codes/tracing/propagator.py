@@ -9,10 +9,9 @@ Provides W3C Trace Context propagation:
 
 from typing import Dict, Optional
 
-from opentelemetry import trace, propagate, context
-from opentelemetry.trace import SpanContext, get_current_span, set_span_in_context
+from opentelemetry import propagate
 from opentelemetry.propagators.textmap import Getter, Setter
-from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.trace import SpanContext, get_current_span
 
 
 class TraceContextPropagator:

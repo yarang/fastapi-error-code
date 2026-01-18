@@ -8,9 +8,10 @@ Tests TracingConfig dataclass with validation:
 - Frozen dataclass for immutability
 """
 
-import pytest
 from dataclasses import FrozenInstanceError
 from typing import Dict
+
+import pytest
 
 from fastapi_error_codes.tracing.config import TracingConfig
 

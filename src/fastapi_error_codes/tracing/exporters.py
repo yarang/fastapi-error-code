@@ -12,12 +12,12 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional
 
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter as OtelJaegerExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+    OTLPSpanExporter as OtelOTLPExporter,
+)
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
-from opentelemetry.sdk.resources import Resource
-
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter as OtelJaegerExporter
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter as OtelOTLPExporter
 
 from fastapi_error_codes.tracing.config import TracingConfig
 

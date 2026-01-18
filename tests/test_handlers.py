@@ -2,14 +2,12 @@
 Tests for handlers.py module - setup_exception_handler function.
 """
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_error_codes.base import BaseAppException
 from fastapi_error_codes.config import ErrorHandlerConfig
 from fastapi_error_codes.handlers import setup_exception_handler
-from fastapi_error_codes.models import ErrorResponse
 
 
 class TestExceptionHandlerRegistration:

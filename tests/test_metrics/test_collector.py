@@ -8,17 +8,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from threading import Thread
-from typing import Any, Dict
 
-import pytest
-
-from fastapi_error_codes.metrics.config import MetricsConfig
 from fastapi_error_codes.metrics.collector import (
-    ErrorMetricsCollector,
     ErrorEvent,
+    ErrorMetricsCollector,
     MetricsSnapshot,
     TimeBucket,
 )
+from fastapi_error_codes.metrics.config import MetricsConfig
 
 
 class TestErrorEvent:
