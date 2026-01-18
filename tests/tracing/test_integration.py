@@ -184,10 +184,16 @@ class TestTraceCorrelationWithMetrics:
 
         mock_collector = Mock()
 
-        correlate_trace_with_metrics(404, mock_collector)
+        correlate_trace_with_metrics(
+            error_code=404,
+            error_name="NotFound",
+            status_code=404,
+            message="Resource not found",
+            metrics_collector=mock_collector
+        )
 
-        # Should not crash
-        assert True
+        # Should not crash but should not call record
+        assert not mock_collector.record.called
 
     def test_correlate_trace_with_metrics_with_trace(self):
         """WHEN active trace exists, THEN should record with trace_id"""
@@ -206,10 +212,21 @@ class TestTraceCorrelationWithMetrics:
         with tracer.start_as_current_span("test-span"):
             mock_collector = Mock()
 
-            correlate_trace_with_metrics(404, mock_collector)
+            correlate_trace_with_metrics(
+                error_code=404,
+                error_name="NotFound",
+                status_code=404,
+                message="Resource not found",
+                metrics_collector=mock_collector,
+                path="/api/users/123",
+                method="GET"
+            )
 
-            # Should have called record_error with trace_id label
-            assert True
+            # Should have called record with trace_id in detail
+            mock_collector.record.assert_called_once()
+            call_kwargs = mock_collector.record.call_args[1]
+            assert "detail" in call_kwargs
+            assert "trace_id" in call_kwargs["detail"]
 
         integration.shutdown()
 
